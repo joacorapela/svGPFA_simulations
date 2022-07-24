@@ -19,8 +19,8 @@ import svGPFA.utils.initUtils
 def main(argv):
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("est_init_number", help="estimation init number",
-                        type=int)
+    parser.add_argument("--est_init_number", help="estimation init number",
+                        type=int, default=544)
     parser.add_argument("--sim_res_number", help="simuluation result number",
                         type=int, default=32451751)
     args = parser.parse_args()
