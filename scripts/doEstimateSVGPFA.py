@@ -22,7 +22,7 @@ def main(argv):
     parser.add_argument("--est_init_number", help="estimation init number",
                         type=int, default=544)
     parser.add_argument("--sim_res_number", help="simuluation result number",
-                        type=int, default=32451751)
+                        type=int, default=68760574)
     args = parser.parse_args()
     sim_res_number = args.sim_res_number
     est_init_number = args.est_init_number
@@ -33,10 +33,10 @@ def main(argv):
     sim_res_config = configparser.ConfigParser()
     sim_res_config.read(sim_res_config_filename)
 
-    sim_res_filename = sim_res_config["simulation_results"]["simResFilename"]
+    sim_res_filename = sim_res_config["simulation_results"]["sim_res_filename"]
     with open(sim_res_filename, "rb") as f:
         simRes = pickle.load(f)
-    spikes_times = simRes["spikes"]
+    spikes_times = simRes["spikes_times"]
     n_trials = len(spikes_times)
     n_neurons = len(spikes_times[0])
 
@@ -73,7 +73,7 @@ def main(argv):
         args_info=args_info)
 
     default_params = svGPFA.utils.initUtils.getDefaultParamsDict(
-        n_neurons=n_neurons, n_latents=n_latents)
+        n_neurons=n_neurons, n_trials=n_trials, n_latents=n_latents)
 
     initial_params, quad_params, kernels_types, optim_params = \
         svGPFA.utils.initUtils.getParams(
