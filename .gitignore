@@ -8,6 +8,7 @@
 slurm-*
 .nfs*
 .ipynb*
+fromRsync
 
 # directories
 results/
@@ -16,3 +17,4 @@ data/
 old/
 notes/
 log/
+.mypy_cache/
