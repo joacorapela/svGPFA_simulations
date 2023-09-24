@@ -53,7 +53,9 @@ def main(argv):
     trialsLengths = [float(str) for str in simInitConfig["control_variables"]["trialsLengths"][1:-1].split(",")]
     nTrials = len(trialsLengths)
     dtSimulate = float(simInitConfig["control_variables"]["dtCIF"])
-    tIndPointsMeans = utils.svGPFA.configUtils.getIndPointsMeans(nTrials=nTrials, nLatents=nLatents, config=simInitConfig)
+    true_indPoints_means = svGPFA.utils.initUtils.getVariationalMean0(
+        n_latents=nLatents, n_trials=nTrials, n_ind_points=nIndPoints,
+        config_file_params=simInitConfig)
 
     with open(simResFilename, "rb") as f: simRes = pickle.load(f)
     tIndPointsCovs = simRes["Kzz"]
@@ -62,6 +64,8 @@ def main(argv):
     tLatentsSamples = simRes["latentsSamples"]
     tLatentsMeans = simRes["latentsMeans"]
     tLatentsSTDs = simRes["latentsSTDs"]
+    true_C = simRes["C"]
+    true_d = simRes["d"]
 
     kernels = utils.svGPFA.configUtils.getKernels(nLatents=nLatents, config=simInitConfig, forceUnitScale=True)
     # latentsMeansFuncs[r][k] \in lambda(t)
