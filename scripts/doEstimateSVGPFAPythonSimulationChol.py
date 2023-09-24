@@ -2,11 +2,12 @@ import sys
 import os
 import pdb
 import random
-import torch
+import cProfile, pstats
 import pickle
 import argparse
 import configparser
 
+import gcnu_common.utils.config_dict
 import svGPFA.stats.svGPFAModelFactory
 import svGPFA.stats.svEM
 import svGPFA.utils.configUtils
@@ -17,102 +18,107 @@ import svGPFA.utils.initUtils
 def main(argv):
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--simResNumber", help="simuluation result number",
-                        type=int, default=32451751)
-    parser.add_argument("--estInitNumber", help="estimation init number",
-                        type=int, default=463)
+    parser.add_argument("--sim_res_number", help="simuluation result number",
+                        type=int, default=91450833)
+#                         type=int, default=68760574)
+#                         type=int, default=95195429)
+#                         type=int, default=32451751)
+    parser.add_argument("--est_init_number", help="estimation init number",
+                        type=int, default=547)
+    parser.add_argument("--profile", help="perform profiling", action="store_true")
+    parser.add_argument("--est_init_config_filename_pattern",
+                        help="estimation initialization configuration "
+                             "filename pattern",
+                        type=str,
+                        default="../data/{:08d}_estimation_metaData.ini")
+    parser.add_argument("--sim_res_config_filename_pattern",
+                        help="simulation result configuration filename "
+                             "pattern",
+                        type=str,
+                        default="../results/{:08d}_simulation_metaData.ini")
+    parser.add_argument("--profiler_filename_pattern",
+                        help="profiler filename pattern", type=str,
+                        default="../results/{:08d}_estimatedModelChol.pstats")
+    parser.add_argument("--model_save_filename_pattern",
+                        help="model save filename pattern",
+                        type=str,
+                        default= "../results/{:08d}_estimatedModel.pickle")
     args = parser.parse_args()
 
-    simResNumber = args.simResNumber
-    estInitNumber = args.estInitNumber
-
-    estInitConfigFilename = \
-        "../data/{:08d}_estimation_metaData.ini".format(estInitNumber)
-    est_init_config = configparser.ConfigParser()
-    est_init_config.read(estInitConfigFilename)
-    import pdb; pdb.set_trace()
+    sim_res_number = args.sim_res_number
+    est_init_number = args.est_init_number
+    profile = args.profile
+    est_init_config_filename_pattern = args.est_init_config_filename_pattern
+    sim_res_config_filename_pattern = args.sim_res_config_filename_pattern
+    profiler_filename_pattern = args.profiler_filename_pattern
+    model_save_filename_pattern = args.model_save_filename_pattern
 
     # load data
-    simResConfigFilename = \
-        "../results/{:08d}_simulation_metaData.ini".format(simResNumber)
-    simResConfig = configparser.ConfigParser()
-    simResConfig.read(simResConfigFilename)
-    simInitConfigFilename = \
-        simResConfig["simulation_params"]["simInitConfigFilename"]
-    simResFilename = simResConfig["simulation_results"]["simResFilename"]
-    with open(simResFilename, "rb") as f:
-        simRes = pickle.load(f)
-    spikes_times = simRes["spikes"]
+    sim_res_config_filename = sim_res_config_filename_pattern.format(
+        sim_res_number)
+    sim_res_config = configparser.ConfigParser()
+    sim_res_config.read(sim_res_config_filename)
+    # sim_init_config_filename = \
+    #     sim_res_config["simulation_params"]["sim_init_config_filename"]
+    sim_res_filename = sim_res_config["simulation_results"]["sim_res_filename"]
+    with open(sim_res_filename, "rb") as f:
+        sim_res = pickle.load(f)
+    spikes_times = sim_res["spikes_times"]
+    n_trials = len(spikes_times)
+    n_neurons = len(spikes_times[0])
 
-    # get initial parameters
-    prior_cov_reg_param = \
-        float(est_init_config["control_variables"]["prior_cov_reg_param"])
-    initial_params, quad_params, kernels_types = \
-        svGPFA.utils.initUtils.getInitialAndQuadParamsAndKernelsTypes(
-            config=est_init_config)
-    kernels_params0 = initial_params["svPosteriorOnLatents"]["kernelsMatricesStore"]["kernelsParams0"]
+    spikes_times = [[spikes_times[r][n].tolist() for n in range(n_neurons)]
+                    for r in range(n_trials)]
 
-    # get optimization parameters
-    optim_params_config = est_init_config._sections["optim_params"]
-    optim_method = optim_params_config["em_method"]
-    optimParams = svGPFA.utils.configUtils.getOptimParams(
-        optim_params_config=optim_params_config)
+    sim_init_config_filename = sim_res_config["simulation_params"]["sim_init_config_filename"]
+    sim_init_config = configparser.ConfigParser()
+    sim_init_config.read(sim_init_config_filename)
+    trials_start_times = [float(str) for str in sim_init_config["data_structure_params"]["trials_start_times"][1:-1].split(",")]
+    trials_end_times = [float(str) for str in sim_init_config["data_structure_params"]["trials_end_times"][1:-1].split(",")]
 
-    # build modelSaveFilename
+    est_init_config_filename = est_init_config_filename_pattern.format(
+        est_init_number)
+    est_init_config = configparser.ConfigParser()
+    est_init_config.read(est_init_config_filename)
+    n_latents = int(est_init_config["model_structure_params"]["n_latents"])
+
+    #    build dynamic parameter specifications
+    args_info = svGPFA.utils.initUtils.getArgsInfo()
+    dynamic_params = svGPFA.utils.initUtils.getParamsDictFromArgs(
+        n_latents=n_latents, n_trials=n_trials, args=vars(args),
+        args_info=args_info)
+    #    build configuration file parameter specifications
+    strings_dict = gcnu_common.utils.config_dict.GetDict(
+        config=est_init_config).get_dict()
+    config_file_params = svGPFA.utils.initUtils.getParamsDictFromStringsDict(
+        n_latents=n_latents, n_trials=n_trials, strings_dict=strings_dict,
+        args_info=args_info)
+    #    build default parameter specificiations
+    default_params = svGPFA.utils.initUtils.getDefaultParamsDict(
+        n_neurons=n_neurons, n_trials=n_trials, n_latents=n_latents)
+    #    finally, get the parameters from the dynamic,
+    #    configuration file and default parameter specifications
+    params, kernels_types = svGPFA.utils.initUtils.getParamsAndKernelsTypes(
+        n_trials=n_trials, n_neurons=n_neurons, n_latents=n_latents,
+        trials_start_times=trials_start_times,
+        trials_end_times=trials_end_times,
+        dynamic_params_spec=dynamic_params,
+        config_file_params_spec=config_file_params,
+        default_params_spec=default_params)
+
+    # build model_save_filename
     estPrefixUsed = True
     while estPrefixUsed:
-        estResNumber = random.randint(0, 10**8)
-        estimResMetaDataFilename = "../results/{:08d}_estimation_metaData.ini".format(estResNumber)
-        if not os.path.exists(estimResMetaDataFilename):
+        est_res_number = random.randint(0, 10**8)
+        estim_res_metadata_filename = "../results/{:08d}_estimation_metaData.ini".format(est_res_number)
+        if not os.path.exists(estim_res_metadata_filename):
             estPrefixUsed = False
-    modelSaveFilename = "../results/{:08d}_estimatedModel.pickle".format(estResNumber)
-
-    # save data for Matlab estimation
-    qSVec0, qSDiag0 = svGPFA.utils.miscUtils.getQSVecsAndQSDiagsFromQSCholVecs(
-        qsCholVecs=initial_params["svPosteriorOnLatents"]["svPosteriorOnIndPoints"]["srQSigma0Vecs"])
-    qMu0 = initial_params["svPosteriorOnLatents"]["svPosteriorOnIndPoints"]["qMu0"]
-    qSVec0 = qSVec0
-    qSDiag0 = qSDiag0
-    C0 = initial_params["svEmbedding"]["C0"]
-    d0 = initial_params["svEmbedding"]["d0"]
-    Z0 = initial_params["svPosteriorOnLatents"]["kernelsMatricesStore"]["inducingPointsLocs0"]
-    legQuadPoints = quad_params["legQuadPoints"]
-    legQuadWeights = quad_params["legQuadWeights"]
-    n_trials = int(est_init_config["control_variables"]["n_trials"])
-    trials_start_times, trials_end_times = svGPFA.utils.initUtils.getTrialsStartEndTimes(
-        n_trials=n_trials, config=est_init_config)
-    trials_lengths = [trials_end_times[r] - trials_start_times[r]
-                      for r in range(n_trials)]
-    if "latentsTrialsTimes" in simRes.keys():
-        latentsTrialsTimes = simRes["latentsTrialsTimes"]
-    elif "times" in simRes.keys():
-        latentsTrialsTimes = simRes["times"]
-    else:
-        raise ValueError("latentsTrialsTimes or times cannot be found in {:s}".format(simResFilename))
-
-    estimationDataForMatlabFilename = "../results/{:08d}_estimationDataForMatlab.mat".format(estResNumber)
-    svGPFA.utils.miscUtils.saveDataForMatlabEstimations(
-        qMu=qMu0, qSVec=qSVec0, qSDiag=qSDiag0,
-        C=C0, d=d0,
-        indPointsLocs=Z0,
-        legQuadPoints=legQuadPoints,
-        legQuadWeights=legQuadWeights,
-        kernelsTypes=kernels_types,
-        kernelsParams=kernels_params0,
-        spikesTimes=spikes_times,
-        indPointsLocsKMSRegEpsilon=prior_cov_reg_param,
-        trialsLengths=torch.tensor(trials_lengths).reshape(-1, 1),
-        latentsTrialsTimes=latentsTrialsTimes,
-        emMaxIter=optimParams["em_max_iter"],
-        eStepMaxIter=optimParams["estep_optim_params"]["max_iter"],
-        mStepEmbeddingMaxIter=optimParams["mstep_embedding_optim_params"]["max_iter"],
-        mStepKernelsMaxIter=optimParams["mstep_kernels_optim_params"]["max_iter"],
-        mStepIndPointsMaxIter=optimParams["mstep_indpointslocs_optim_params"]["max_iter"],
-        saveFilename=estimationDataForMatlabFilename)
+    model_save_filename = model_save_filename_pattern.format(est_res_number)
 
     # build kernels
-    kernels = svGPFA.utils.miscUtils.buildKernels(kernels_types=kernels_types,
-                                                  kernels_params=kernels_params0)
+    kernels_params0 = params["initial_params"]["posterior_on_latents"]["kernels_matrices_store"]["kernels_params0"]
+    kernels = svGPFA.utils.miscUtils.buildKernels(
+        kernels_types=kernels_types, kernels_params=kernels_params0)
 
     # create model
     kernelMatrixInvMethod = svGPFA.stats.svGPFAModelFactory.kernelMatrixInvChol
@@ -124,11 +130,11 @@ def main(argv):
         kernels=kernels, kernelMatrixInvMethod=kernelMatrixInvMethod,
         indPointsCovRep=indPointsCovRep)
 
-    model.setInitialParamsAndData(
+    model.setParamsAndData(
         measurements=spikes_times,
-        initialParams=initial_params,
-        eLLCalculationParams=quad_params,
-        priorCovRegParam=prior_cov_reg_param)
+        initial_params=params["initial_params"],
+        eLLCalculationParams=params["ell_calculation_params"],
+        priorCovRegParam=params["optim_params"]["prior_cov_reg_param"])
 
     # maximize lower bound
     def getKernelParams(model):
@@ -136,18 +142,29 @@ def main(argv):
         return kernelParams
 
     svEM = svGPFA.stats.svEM.SVEM_PyTorch()
+    if profile:
+        pr = cProfile.Profile()
+        pr.enable()
     lowerBoundHist, elapsedTimeHist, terminationInfo, iterationsModelParams = \
-        svEM.maximize(model=model, optimParams=optimParams, method=optim_method,
-                      getIterationModelParamsFn=getKernelParams)
+        svEM.maximizeInSteps(model=model, optim_params=params["optim_params"],
+                      method=params["optim_params"]["optim_method"])
+    if profile:
+        pr.disable()
+        profiler_filename = profiler_filename_pattern.format(est_res_number)
+        s = open(profiler_filename, "w")
+        sortby = "cumulative"
+        ps = pstats.Stats(pr, stream=s)
+        ps.strip_dirs().sort_stats(sortby).print_stats()
+        s.close()
 
     # save estimated values
     estimResConfig = configparser.ConfigParser()
-    estimResConfig["simulation_params"] = {"simResNumber": simResNumber}
-    estimResConfig["optim_params"] = optimParams
+    estimResConfig["simulation_params"] = {"sim_res_number": sim_res_number}
+    estimResConfig["optim_params"] = params["optim_params"]
     estimResConfig["estimation_params"] = {
-        "estInitNumber": estInitNumber,
+        "est_init_number": est_init_number,
     }
-    with open(estimResMetaDataFilename, "w") as f:
+    with open(estim_res_metadata_filename, "w") as f:
         estimResConfig.write(f)
 
     resultsToSave = {"lowerBoundHist": lowerBoundHist,
@@ -155,9 +172,9 @@ def main(argv):
                      "terminationInfo": terminationInfo,
                      "iterationModelParams": iterationsModelParams,
                      "model": model}
-    with open(modelSaveFilename, "wb") as f:
+    with open(model_save_filename, "wb") as f:
         pickle.dump(resultsToSave, f)
-    print("Saved results to {:s}".format(modelSaveFilename))
+    print("Saved results to {:s}".format(model_save_filename))
 
     pdb.set_trace()
 
