@@ -1,13 +1,11 @@
 
 import sys
-import os
 import torch
 import pdb
 import pickle
 import argparse
 import configparser
-from scipy.io import loadmat
-sys.path.append("../src")
+
 import plot.svGPFA.plotUtilsPlotly
 import utils.svGPFA.configUtils
 
@@ -43,15 +41,15 @@ def main(argv):
 
     with open(simResFilename, "rb") as f: simRes = pickle.load(f)
     tTimes = simRes["latentsTrialsTimes"]
-    # tLatentsSamples[r], tLatentsMeans[r], tLatentsVars[r] \in nLatents x nSamples
-    tLatentsSamples = simRes["latentsSamples"]
-    tLatentsMeans = simRes["latentsMeans"]
-    tLatentsSTDs = simRes["latentsSTDs"]
+    # t_latents_samples[r], t_latents_means[r], tLatentsVars[r] \in nLatents x nSamples
+    t_latents_samples = simRes["latentsSamples"]
+    t_latents_means = simRes["latentsMeans"]
+    t_latents_STDs = simRes["latentsSTDs"]
 
     # tEmbeddingSamples[r], tEmbeddingMeans[r], tEmbeddingSTDs \in nNeurons x nSamples
-    tEmbeddingSamples = [torch.matmul(tC, tLatentsSamples[r])+td for r in range(nTrials)]
-    tEmbeddingMeans = [torch.matmul(tC, tLatentsMeans[r])+td for r in range(nTrials)]
-    tEmbeddingSTDs = [torch.matmul(tC, tLatentsSTDs[r]) for r in range(nTrials)]
+    tEmbeddingSamples = [torch.matmul(tC, t_latents_samples[r])+td for r in range(nTrials)]
+    tEmbeddingMeans = [torch.matmul(tC, t_latents_means[r])+td for r in range(nTrials)]
+    tEmbeddingSTDs = [torch.matmul(tC, t_latents_STDs[r]) for r in range(nTrials)]
 
     with open(modelSaveFilename, "rb") as f: estResults = pickle.load(f)
     model = estResults["model"]
@@ -64,7 +62,6 @@ def main(argv):
     eSTDsToPlot = eEmbeddingVars[trialToPlot,:,neuronToPlot].sqrt()
     title = "Trial {:d}, Neuron {:d}".format(trialToPlot, neuronToPlot)
     fig = plot.svGPFA.plotUtilsPlotly.getPlotTrueAndEstimatedEmbedding(tTimes=tTimes[trialToPlot], tSamples=tSamplesToPlot, tMeans=tMeansToPlot, tSTDs=tSTDsToPlot, eTimes=tTimes[trialToPlot], eMeans=eMeansToPlot, eSTDs=eSTDsToPlot, title=title)
-
     fig.write_image(figFilenamePattern.format("png"))
     fig.write_html(figFilenamePattern.format("html"))
     # fig.show()
