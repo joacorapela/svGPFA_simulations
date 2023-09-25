@@ -1,156 +1,190 @@
 
 import pdb
 import sys
-import os
-import random
 import torch
-import plotly
 import plotly.io as pio
 import pickle
 import argparse
 import configparser
-import pandas as pd
-import matplotlib.pyplot as plt
-import sklearn.metrics
-sys.path.append("../src")
-import plot.svGPFA.plotUtils
-import plot.svGPFA.plotUtilsPlotly
-import stats.pointProcess.tests
-import utils.svGPFA.miscUtils
-import utils.svGPFA.configUtils
+import numpy as np
+
+import gcnu_common.stats.pointProcesses.tests
+import svGPFA.plot.plotUtils
+import svGPFA.plot.plotUtilsPlotly
+import svGPFA.utils.miscUtils
+import svGPFA.utils.configUtils
+
 
 def main(argv):
     parser = argparse.ArgumentParser()
-    parser.add_argument("simResNumber", help="Simulation result number", type=int)
-    parser.add_argument("--latentToPlot", help="Latent to plot", type=int, default=0)
-    parser.add_argument("--trialToPlot", help="Trial to plot", type=int, default=0)
-    parser.add_argument("--neuronToPlot", help="Neuron to plot", type=int, default=0)
-    parser.add_argument("--nResamplesKSTest", help="Number of resamples for KS test", type=int, default=10)
+    parser.add_argument("sim_res_number", help="Simulation result number",
+                        type=int)
+    parser.add_argument("--latent_to_plot", help="Latent to plot",
+                        type=int, default=0)
+    parser.add_argument("--trial_to_plot", help="Trial to plot", type=int,
+                        default=0)
+    parser.add_argument("--neuron_to_plot", help="Neuron to plot", type=int,
+                        default=0)
+    parser.add_argument("--n_resamples_ksTest",
+                        help="Number of resamples for KS test", type=int,
+                        default=10)
+    parser.add_argument("--sim_res_config_filename_pattern",
+                        help="Simulation result configuration filename pattern",
+                        type=str,
+                        default="../results/{:08d}_simulation_metaData.ini")
     args = parser.parse_args()
 
-    simResNumber = args.simResNumber
-    latentToPlot = args.latentToPlot
-    trialToPlot = args.trialToPlot
-    neuronToPlot = args.neuronToPlot
-    nResamplesKSTest = args.nResamplesKSTest
+    sim_res_number = args.sim_res_number
+    latent_to_plot = args.latent_to_plot
+    trial_to_plot = args.trial_to_plot
+    neuron_to_plot = args.neuron_to_plot
+    n_resamples_ksTest = args.n_resamples_ksTest
+    sim_res_config_filename_pattern = args.sim_res_config_filename_pattern
 
-    simResConfigFilename = "results/{:08d}_simulation_metaData.ini".format(simResNumber)
-    simResConfig = configparser.ConfigParser()
-    simResConfig.read(simResConfigFilename)
-    simInitConfigFilename = simResConfig["simulation_params"]["simInitConfigFilename"]
+    sim_res_config_filename = sim_res_config_filename_pattern.format(
+        sim_res_number)
+    sim_res_config = configparser.ConfigParser()
+    sim_res_config.read(sim_res_config_filename)
+    sim_init_config_filename = sim_res_config["simulation_params"]["sim_init_config_filename"]
 
-    simInitConfig = configparser.ConfigParser()
-    simInitConfig.read(simInitConfigFilename)
-    nLatents = int(simInitConfig["control_variables"]["nLatents"])
-    nNeurons = int(simInitConfig["control_variables"]["nNeurons"])
-    trialsLengths = [float(str) for str in simInitConfig["control_variables"]["trialsLengths"][1:-1].split(",")]
-    dtCIF = float(simInitConfig["control_variables"]["dtCIF"])
-    nTrials = len(trialsLengths)
-    T = torch.tensor(trialsLengths).max().item()
-    CFilename = simInitConfig["embedding_params"]["C_filename"]
-    dFilename = simInitConfig["embedding_params"]["d_filename"]
-    C, d = utils.svGPFA.configUtils.getLinearEmbeddingParams(CFilename=CFilename, dFilename=dFilename)
+    sim_init_config = configparser.ConfigParser()
+    sim_init_config.read(sim_init_config_filename)
+    n_time_steps_CIF = float(sim_init_config["control_variables"]["n_time_steps_CIF"])
+    # CFilename = sim_init_config["embedding_params0"]["C0_filename"]
+    # dFilename = sim_init_config["embedding_params0"]["d0_filename"]
+    # C_np = np.genfromtxt(CFilename, delimiter=",")
+    # C = torch.from_numpy(C_np).type(torch.double)
+    # d_np = np.genfromtxt(dFilename, delimiter=",")
+    # d = torch.from_numpy(d_np).type(torch.double).unsqueeze(dim=1)
 
-    simResFilename = "results/{:08d}_simRes.pickle".format(simResNumber)
-    latentFigFilenamePattern = \
-        "figures/{:08d}_simulation_latent_trial{:03d}_latent{:03d}.{{:s}}".format(simResNumber, trialToPlot, latentToPlot)
-    embeddingFigFilenamePattern = \
-        "figures/{:08d}_simulation_embedding_trial{:03d}_neuron{:03d}.{{:s}}".format(simResNumber, trialToPlot, neuronToPlot)
-    cifFigFilenamePattern = \
-        "figures/{:08d}_simulation_cif_trial{:03d}_neuron{:03d}.{{:s}}".format(simResNumber, trialToPlot, neuronToPlot)
-    spikesTimesFigFilenamePattern = \
-        "figures/{:08d}_simulation_spikesTimes_trial{:03d}.{{:s}}".format(simResNumber, trialToPlot)
-    spikesRatesFigFilenamePattern = \
-       "figures/{:08d}_simulation_spikesRates.{{:s}}".format(simResNumber)
-    ksTestTimeRescalingFigFilenamePattern = \
-        "figures/{:08d}_simulation_ksTestTimeRescaling_trial{:03d}_neuron{:03d}.{{:s}}".format(simResNumber, trialToPlot, neuronToPlot)
-    rocFigFilenamePattern = \
-        "figures/{:08d}_simulation_rocAnalysis_trial{:03d}_neuron{:03d}.{{:s}}".format(simResNumber, trialToPlot, neuronToPlot)
+    sim_res_filename = "../results/{:08d}_simRes.pickle".format(sim_res_number)
+    latent_fig_filename_pattern = \
+        "../figures/{:08d}_simulation_latent_trial{:03d}_latent{:03d}.{{:s}}".\
+        format(sim_res_number, trial_to_plot, latent_to_plot)
+    embedding_fig_filename_pattern = \
+        "../figures/{:08d}_simulation_embedding_trial{:03d}_neuron{:03d}.{{:s}}".\
+        format(sim_res_number, trial_to_plot, neuron_to_plot)
+    cif_fig_filename_pattern = \
+        "../figures/{:08d}_simulation_cif_trial{:03d}_neuron{:03d}.{{:s}}".\
+        format(sim_res_number, trial_to_plot, neuron_to_plot)
+    spikesTimes_fig_filename_pattern = \
+        "../figures/{:08d}_simulation_spikesTimes_trial{:03d}.{{:s}}".format(
+            sim_res_number, trial_to_plot)
+    spikes_rates_fig_filename_pattern = \
+        "../figures/{:08d}_simulation_spikesRates.{{:s}}".format(sim_res_number)
+    ksTest_time_rescaling_fig_filename_pattern = \
+        "../figures/{:08d}_simulation_ksTestTimeRescaling_trial{:03d}_neuron{:03d}.{{:s}}".format(sim_res_number, trial_to_plot, neuron_to_plot)
+    roc_fig_filename_pattern = \
+        "../figures/{:08d}_simulation_rocAnalysis_trial{:03d}_neuron{:03d}.{{:s}}".format(sim_res_number, trial_to_plot, neuron_to_plot)
 
-    with open(simResFilename, "rb") as f: simRes = pickle.load(f)
-    times = simRes["latentsTrialsTimes"]
-    latentsSamples = simRes["latentsSamples"]
-    latentsMeans = simRes["latentsMeans"]
-    latentsSTDs = simRes["latentsSTDs"]
-    cifValues = simRes["cifValues"]
-    spikes = simRes["spikes"]
+    with open(sim_res_filename, "rb") as f:
+        simRes = pickle.load(f)
+    trials_times = simRes["trials_times"]
+    latents_samples = simRes["latents_samples"]
+    latents_means = simRes["latents_means"]
+    latents_STDs = simRes["latents_STDs"]
+    cif_values = simRes["cif_values"]
+    if "spikes" in simRes:
+        spikes_times = simRes["spikes"]
+    elif "spikes_times" in simRes:
+        spikes_times = simRes["spikes_times"]
+    else:
+        raise ValueError("spikes or spikes_times should be keys of "
+                         f"{sim_res_filename}")
 
     pio.renderers.default = "browser"
 
-    timesLatentToPlot = times[trialToPlot]
-    latentSamplesToPlot = latentsSamples[trialToPlot][latentToPlot,:]
-    latentMeansToPlot = latentsMeans[trialToPlot][latentToPlot,:]
-    latentSTDsToPlot = latentsSTDs[trialToPlot][latentToPlot,:]
-    title = "Trial {:d}, Latent {:d}".format(trialToPlot, latentToPlot)
-    fig = plot.svGPFA.plotUtilsPlotly.getSimulatedLatentPlot(times=timesLatentToPlot, latentSamples=latentSamplesToPlot, latentMeans=latentMeansToPlot, latentSTDs=latentSTDsToPlot, title=title)
-    fig.write_image(latentFigFilenamePattern.format("png"))
-    fig.write_html(latentFigFilenamePattern.format("html"))
+    n_trials = len(trials_times)
+    trials_times_to_plot = trials_times[trial_to_plot].squeeze()
+
+    latent_samples_to_plot = latents_samples[trial_to_plot][latent_to_plot, :]
+    latent_means_to_plot = latents_means[trial_to_plot][latent_to_plot, :]
+    latents_STDs_to_plot = latents_STDs[trial_to_plot][latent_to_plot, :]
+    title = "Trial {:d}, Latent {:d}".format(trial_to_plot, latent_to_plot)
+    fig = svGPFA.plot.plotUtilsPlotly.getSimulatedLatentPlot(
+        times=trials_times_to_plot, latent_samples=latent_samples_to_plot,
+        latent_means=latent_means_to_plot, latent_STDs=latents_STDs_to_plot,
+        title=title)
+    fig.write_image(latent_fig_filename_pattern.format("png"))
+    fig.write_html(latent_fig_filename_pattern.format("html"))
     fig.show()
 
-    # embeddingSamples[r], embeddingMeans[r], embeddingSTDs \in nNeurons x nSamples
-    embeddingSamples = [torch.matmul(C, latentsSamples[r])+d for r in range(nTrials)]
-    embeddingMeans = [torch.matmul(C, latentsMeans[r])+d for r in range(nTrials)]
-    embeddingSTDs = [torch.matmul(C, latentsSTDs[r]) for r in range(nTrials)]
-    timesEmbeddingToPlot = times[trialToPlot]
-    embeddingSamplesToPlot = embeddingSamples[trialToPlot][neuronToPlot,:]
-    embeddingMeansToPlot = embeddingMeans[trialToPlot][neuronToPlot,:]
-    embeddingSTDsToPlot = embeddingSTDs[trialToPlot][neuronToPlot,:]
-    title = "Trial {:d}, Neuron {:d}".format(trialToPlot, neuronToPlot)
-    fig = plot.svGPFA.plotUtilsPlotly.getSimulatedEmbeddingPlot(times=timesEmbeddingToPlot, samples=embeddingSamplesToPlot, means=embeddingMeansToPlot, stds=embeddingSTDsToPlot, title=title)
-    fig.write_image(embeddingFigFilenamePattern.format("png"))
-    fig.write_html(embeddingFigFilenamePattern.format("html"))
+    # embedding_samples[r], embedding_means[r], embedding_STDs
+    # \in n_neurons x nSamples
+    embedding_samples = [torch.matmul(C, latents_samples[r])+d
+                         for r in range(n_trials)]
+    embedding_means = [torch.matmul(C, latents_means[r])+d
+                       for r in range(n_trials)]
+    embedding_STDs = [torch.matmul(C**2, latents_STDs[r]**2).sqrt()
+                      for r in range(n_trials)]
+    embedding_samples_to_plot = \
+        embedding_samples[trial_to_plot][neuron_to_plot, :]
+    embedding_means_to_plot = embedding_means[trial_to_plot][neuron_to_plot, :]
+    embedding_STDs_to_plot = embedding_STDs[trial_to_plot][neuron_to_plot, :]
+    title = "Trial {:d}, Neuron {:d}".format(trial_to_plot, neuron_to_plot)
+    fig = svGPFA.plot.plotUtilsPlotly.getSimulatedEmbeddingPlot(
+        times=trials_times_to_plot, samples=embedding_samples_to_plot,
+        means=embedding_means_to_plot, stds=embedding_STDs_to_plot,
+        title=title)
+    fig.write_image(embedding_fig_filename_pattern.format("png"))
+    fig.write_html(embedding_fig_filename_pattern.format("html"))
     fig.show()
 
-    timesCIFToPlot = times[trialToPlot]
-    valuesCIFToPlot = cifValues[trialToPlot][neuronToPlot]
-    title = "Trial {:d}, Neuron {:d}".format(trialToPlot, neuronToPlot)
-    fig = plot.svGPFA.plotUtilsPlotly.getPlotCIF(times=timesCIFToPlot, values=valuesCIFToPlot, title=title)
-    fig.write_image(cifFigFilenamePattern.format("png"))
-    fig.write_html(cifFigFilenamePattern.format("html"))
+    cif_values_to_plot = cif_values[trial_to_plot][neuron_to_plot]
+    title = "Trial {:d}, Neuron {:d}".format(trial_to_plot, neuron_to_plot)
+    fig = svGPFA.plot.plotUtilsPlotly.getPlotCIF(times=trials_times_to_plot,
+                                                 values=cif_values_to_plot,
+                                                 title=title)
+    fig.write_image(cif_fig_filename_pattern.format("png"))
+    fig.write_html(cif_fig_filename_pattern.format("html"))
     fig.show()
 
-#     spikesToPlot = spikes[trialToPlot]
-#     title = "Trial {:d}".format(trialToPlot)
-#     fig = plot.svGPFA.plotUtilsPlotly.getSpikesTimesPlotOneTrial(spikes_times=spikesToPlot, title=title)
-#     fig.write_image(spikesTimesFigFilenamePattern.format("png"))
-#     fig.write_html(spikesTimesFigFilenamePattern.format("html"))
-#     fig.show()
-
-    spikesRates = utils.svGPFA.miscUtils.computeSpikeRates(trialsTimes=times, spikesTimes=spikes)
-    fig = plot.svGPFA.plotUtilsPlotly.getPlotSpikeRatesForAllTrialsAndAllNeurons(spikesRates=spikesRates)
-    fig.write_image(spikesRatesFigFilenamePattern.format("png"))
-    fig.write_html(spikesRatesFigFilenamePattern.format("html"))
+    spikes_times_to_plot = spikes_times[trial_to_plot]
+    title = "Trial {:d}".format(trial_to_plot)
+    fig = svGPFA.plot.plotUtilsPlotly.getSpikesTimesPlotOneTrial(
+        spikes_times=spikes_times_to_plot, title=title)
+    fig.write_image(spikesTimes_fig_filename_pattern.format("png"))
+    fig.write_html(spikesTimes_fig_filename_pattern.format("html"))
     fig.show()
 
-    oneTrialCIFTimes = torch.arange(0, T, dtCIF)
-    cifTimes = torch.unsqueeze(torch.ger(torch.ones(nTrials), oneTrialCIFTimes), dim=2)
-    cifTimesKS = cifTimes[trialToPlot,:,0]
-    cifValuesKS = cifValues[trialToPlot][neuronToPlot]
-    spikesTimesKS = spikes[trialToPlot][neuronToPlot]
-    diffECDFsX, diffECDFsY, estECDFx, estECDFy, simECDFx, simECDFy, cb = stats.pointProcess.tests.KSTestTimeRescalingNumericalCorrection(spikesTimes=spikesTimesKS, cifTimes=cifTimesKS, cifValues=cifValuesKS, gamma=nResamplesKSTest)
-    title = "Trial {:d}, Neuron {:d} ({:d} spikes)".format(trialToPlot, neuronToPlot, len(spikesTimesKS))
-    fig = plot.svGPFA.plotUtilsPlotly.getPlotResKSTestTimeRescalingNumericalCorrection(
+    spikes_rates = svGPFA.utils.miscUtils.computeSpikeRates(
+        trials_times=trials_times, spikes_times=spikes_times)
+    fig = svGPFA.plot.plotUtilsPlotly.\
+        getPlotSpikeRatesForAllTrialsAndAllNeurons(spikes_rates=spikes_rates)
+    fig.write_image(spikes_rates_fig_filename_pattern.format("png"))
+    fig.write_html(spikes_rates_fig_filename_pattern.format("html"))
+    fig.show()
+
+    cif_values_to_plot = cif_values[trial_to_plot][neuron_to_plot]
+    spikes_times_to_plot = spikes_times[trial_to_plot][neuron_to_plot]
+
+    diffECDFsX, diffECDFsY, estECDFx, estECDFy, simECDFx, simECDFy, cb = \
+        gcnu_common.stats.pointProcesses.tests.KSTestTimeRescalingNumericalCorrection(
+            spikes_times=spikes_times_to_plot, cif_times=trials_times_to_plot,
+            cif_values=cif_values_to_plot, gamma=n_resamples_ksTest)
+    title = "Trial {:d}, Neuron {:d} ({:d} spikes)".format(
+        trial_to_plot, neuron_to_plot, len(spikes_times_to_plot))
+    fig = svGPFA.plot.plotUtilsPlotly.getPlotResKSTestTimeRescalingNumericalCorrection(
         diffECDFsX=diffECDFsX, diffECDFsY=diffECDFsY, estECDFx=estECDFx,
         estECDFy=estECDFy, simECDFx=simECDFx, simECDFy=simECDFy, cb=cb,
         title=title)
-    fig.write_image(ksTestTimeRescalingFigFilenamePattern.format("png"))
-    fig.write_html(ksTestTimeRescalingFigFilenamePattern.format("html"))
+    fig.write_image(ksTest_time_rescaling_fig_filename_pattern.format("png"))
+    fig.write_html(ksTest_time_rescaling_fig_filename_pattern.format("html"))
     fig.show()
 
-    pk = cifValuesKS*dtCI
-    bins = pd.interval_range(start=0, end=T, periods=len(pk))
-    cutRes, _ = pd.cut(spikesTimesKS, bins=bins, retbins=True)
-    Y = torch.from_numpy(cutRes.value_counts().values)
-    fpr, tpr, thresholds = sklearn.metrics.roc_curve(Y, pk, pos_label=1)
-    roc_auc = sklearn.metrics.auc(fpr, tpr)
-    title = "Trial {:d}, Neuron {:d}".format(trialToPlot, neuronToPlot)
-    fig = plot.svGPFA.plotUtilsPlotly.getPlotResROCAnalysis(fpr=fpr, tpr=tpr, auc=roc_auc, title=title)
-    fig.write_image(rocFigFilenamePattern.format("png"))
-    fig.write_html(rocFigFilenamePattern.format("html"))
+    fpr, tpr, roc_auc = svGPFA.utils.miscUtils.computeSpikeClassificationROC(
+        spikes_times=spikes_times_to_plot,
+        cif_times=trials_times_to_plot,
+        cif_values=cif_values_to_plot)
+    title = "Trial {:d}, Neuron {:d}".format(trial_to_plot, neuron_to_plot)
+    fig = svGPFA.plot.plotUtilsPlotly.getPlotResROCAnalysis(
+        fpr=fpr, tpr=tpr, auc=roc_auc, title=title)
+    fig.write_image(roc_fig_filename_pattern.format("png"))
+    fig.write_html(roc_fig_filename_pattern.format("html"))
     fig.show()
-
 
     pdb.set_trace()
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     main(sys.argv)
