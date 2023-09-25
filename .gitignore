@@ -8,6 +8,8 @@
 slurm-*
 .nfs*
 .ipynb*
+fromRsync
+
 # directories
 results/
 figures/

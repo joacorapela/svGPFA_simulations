@@ -38,7 +38,7 @@ def main(argv):
                         default="../results/{:08d}_simulation_metaData.ini")
     parser.add_argument("--profiler_filename_pattern",
                         help="profiler filename pattern", type=str,
-                        default="../results/{:08d}_estimatedModelChol.pstats")
+                        default="../results/{:08d}_estimatedModel.pstats")
     parser.add_argument("--model_save_filename_pattern",
                         help="model save filename pattern",
                         type=str,
@@ -146,8 +146,8 @@ def main(argv):
         pr = cProfile.Profile()
         pr.enable()
     lowerBoundHist, elapsedTimeHist, terminationInfo, iterationsModelParams = \
-        svEM.maximizeInSteps(model=model, optim_params=params["optim_params"],
-                      method=params["optim_params"]["optim_method"])
+        svEM.maximizeSimultaneously(model=model,
+                                    optim_params=params["optim_params"])
     if profile:
         pr.disable()
         profiler_filename = profiler_filename_pattern.format(est_res_number)

@@ -64,6 +64,8 @@ def main(argv):
     tLatentsSamples = simRes["latentsSamples"]
     tLatentsMeans = simRes["latentsMeans"]
     tLatentsSTDs = simRes["latentsSTDs"]
+    true_C = simRes["C"]
+    true_d = simRes["d"]
 
     kernels = utils.svGPFA.configUtils.getKernels(nLatents=nLatents, config=simInitConfig, forceUnitScale=True)
     # latentsMeansFuncs[r][k] \in lambda(t)
