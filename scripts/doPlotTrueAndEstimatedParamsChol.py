@@ -53,7 +53,9 @@ def main(argv):
     trialsLengths = [float(str) for str in simInitConfig["control_variables"]["trialsLengths"][1:-1].split(",")]
     nTrials = len(trialsLengths)
     dtSimulate = float(simInitConfig["control_variables"]["dtCIF"])
-    tIndPointsMeans = utils.svGPFA.configUtils.getIndPointsMeans(nTrials=nTrials, nLatents=nLatents, config=simInitConfig)
+    true_indPoints_means = svGPFA.utils.initUtils.getVariationalMean0(
+        n_latents=nLatents, n_trials=nTrials, n_ind_points=nIndPoints,
+        config_file_params=simInitConfig)
 
     with open(simResFilename, "rb") as f: simRes = pickle.load(f)
     tIndPointsCovs = simRes["Kzz"]
