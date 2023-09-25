@@ -8,7 +8,6 @@
 slurm-*
 .nfs*
 .ipynb*
-
 # directories
 results/
 figures/
@@ -16,3 +15,5 @@ data/
 old/
 notes/
 log/
+.mypy_cache/
+slurm/
