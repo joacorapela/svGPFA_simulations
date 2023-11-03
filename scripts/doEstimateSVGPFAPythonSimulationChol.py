@@ -175,6 +175,7 @@ def main(argv):
     with open(model_save_filename, "wb") as f:
         pickle.dump(resultsToSave, f)
     print("Saved results to {:s}".format(model_save_filename))
+    print("Elapsed time {:f}".format(elapsedTimeHist[-1]))
 
     pdb.set_trace()
 
