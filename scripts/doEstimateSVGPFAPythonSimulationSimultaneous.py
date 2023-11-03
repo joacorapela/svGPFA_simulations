@@ -6,6 +6,7 @@ import cProfile, pstats
 import pickle
 import argparse
 import configparser
+import torch
 
 import gcnu_common.utils.config_dict
 import svGPFA.stats.svGPFAModelFactory
@@ -24,7 +25,9 @@ def main(argv):
 #                         type=int, default=95195429)
 #                         type=int, default=32451751)
     parser.add_argument("--est_init_number", help="estimation init number",
-                        type=int, default=547)
+                        type=int, default=551)
+    parser.add_argument("--device", help="device where to run the model (e.g., cpu or cuda:0)",
+                        type=str, default="cpu")
     parser.add_argument("--profile", help="perform profiling", action="store_true")
     parser.add_argument("--est_init_config_filename_pattern",
                         help="estimation initialization configuration "
@@ -38,7 +41,7 @@ def main(argv):
                         default="../results/{:08d}_simulation_metaData.ini")
     parser.add_argument("--profiler_filename_pattern",
                         help="profiler filename pattern", type=str,
-                        default="../results/{:08d}_estimatedModel.pstats")
+                        default="../results/{:08d}_estimatedModel.prof")
     parser.add_argument("--model_save_filename_pattern",
                         help="model save filename pattern",
                         type=str,
@@ -47,6 +50,7 @@ def main(argv):
 
     sim_res_number = args.sim_res_number
     est_init_number = args.est_init_number
+    device = torch.device(args.device)
     profile = args.profile
     est_init_config_filename_pattern = args.est_init_config_filename_pattern
     sim_res_config_filename_pattern = args.sim_res_config_filename_pattern
@@ -136,6 +140,8 @@ def main(argv):
         eLLCalculationParams=params["ell_calculation_params"],
         priorCovRegParam=params["optim_params"]["prior_cov_reg_param"])
 
+    model.to(device=device)
+
     # maximize lower bound
     def getKernelParams(model):
         kernelParams = model.getKernelsParams()[0]
@@ -151,30 +157,28 @@ def main(argv):
     if profile:
         pr.disable()
         profiler_filename = profiler_filename_pattern.format(est_res_number)
-        s = open(profiler_filename, "w")
-        sortby = "cumulative"
-        ps = pstats.Stats(pr, stream=s)
-        ps.strip_dirs().sort_stats(sortby).print_stats()
-        s.close()
+        pr.dump_stats(profiler_filename)
 
-    # save estimated values
-    estimResConfig = configparser.ConfigParser()
-    estimResConfig["simulation_params"] = {"sim_res_number": sim_res_number}
-    estimResConfig["optim_params"] = params["optim_params"]
-    estimResConfig["estimation_params"] = {
-        "est_init_number": est_init_number,
-    }
-    with open(estim_res_metadata_filename, "w") as f:
-        estimResConfig.write(f)
+    print("Elapsed time {:f}".format(elapsedTimeHist[-1]))
 
-    resultsToSave = {"lowerBoundHist": lowerBoundHist,
-                     "elapsedTimeHist": elapsedTimeHist,
-                     "terminationInfo": terminationInfo,
-                     "iterationModelParams": iterationsModelParams,
-                     "model": model}
-    with open(model_save_filename, "wb") as f:
-        pickle.dump(resultsToSave, f)
-    print("Saved results to {:s}".format(model_save_filename))
+#     # save estimated values
+#     estimResConfig = configparser.ConfigParser()
+#     estimResConfig["simulation_params"] = {"sim_res_number": sim_res_number}
+#     estimResConfig["optim_params"] = params["optim_params"]
+#     estimResConfig["estimation_params"] = {
+#         "est_init_number": est_init_number,
+#     }
+#     with open(estim_res_metadata_filename, "w") as f:
+#         estimResConfig.write(f)
+# 
+#     resultsToSave = {"lowerBoundHist": lowerBoundHist,
+#                      "elapsedTimeHist": elapsedTimeHist,
+#                      "terminationInfo": terminationInfo,
+#                      "iterationModelParams": iterationsModelParams,
+#                      "model": model}
+#     with open(model_save_filename, "wb") as f:
+#         pickle.dump(resultsToSave, f)
+#     print("Saved results to {:s}".format(model_save_filename))
 
     pdb.set_trace()
 
