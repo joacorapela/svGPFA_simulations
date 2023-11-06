@@ -16,6 +16,7 @@ results/*
 !results/91450833_simRes.pickle
 data/*
 !data/00000551_estimation_metaData.ini
+!data/00000102_simulation_metaData.ini
 figures
 old/
 notes/
