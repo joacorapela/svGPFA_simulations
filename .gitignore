@@ -11,9 +11,12 @@ slurm-*
 fromRsync
 
 # directories
-results/
-figures/
-data/
+results/*
+!results/91450833_simulation_metaData.ini
+!results/91450833_simRes.pickle
+data/*
+!data/00000551_estimation_metaData.ini
+figures
 old/
 notes/
 log/
