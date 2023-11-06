@@ -21,9 +21,6 @@ n_repeats = 1
 cuda_device_index = 0
 est_init_config_filename_pattern = "../data/{:08d}_estimation_metaData.ini"
 sim_res_config_filename_pattern = "../results/{:08d}_simulation_metaData.ini"
-results_metadata_filename_pattern = "../results/{:08d}_gpuBugReport_metadata.ini"
-results_filename_pattern = "../results/{:08d}_gpuBugReport.pickle"
-fig_filename_pattern = "../figures/{:08d}_gpuBugReport.{:s}"
 
 # load data
 sim_res_config_filename = sim_res_config_filename_pattern.format(
